@@ -1,0 +1,9 @@
+__pycache__/
+*.pyc
+CLAUDE.md
+
+# listy adresow i raporty (nazwy wewnetrznych serwerow) - nigdy na GitHub
+INPUT/*
+!INPUT/.gitkeep
+OUTPUT/*
+!OUTPUT/.gitkeep
