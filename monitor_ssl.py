@@ -73,10 +73,10 @@ def wczytaj_adresy(tekst):
     Duplikaty pomijane, zle linie zostaja z host=None (wynik BLAD)."""
     wyn, widziane = [], set()
     for linia in tekst.splitlines():
-        linia = linia.strip().lstrip("﻿")
+        linia = linia.strip().lstrip("\ufeff")
         if not linia or linia.startswith("#"):
             continue
-        tok = re.split(r"[;,\t ]+", linia)[0]
+        tok = re.split(r"[;,\t ]+", linia)[0].strip("\"'")
         if tok.lower() in NAGLOWKI:
             continue
         try:
@@ -232,6 +232,10 @@ def raport(wyniki, out_dir, prog, teraz):
         ws.cell(ws.max_row, 1).fill = PatternFill("solid", start_color=KOLORY[w["status"]])
         for k in (4, 5):
             ws.cell(ws.max_row, k).number_format = "yyyy-mm-dd hh:mm"
+    for row in ws.iter_rows(min_row=2):
+        for c in row:
+            if isinstance(c.value, str) and c.value[:1] == "=":
+                c.data_type = "s"  # CN/SAN pochodza z cudzego serwera - nie wolno ich uznac za formule
     for i, szer in enumerate((14, 32, 12, 18, 18, 30, 36, 50, 44), 1):
         ws.column_dimensions[get_column_letter(i)].width = szer
     for row in ws.iter_rows(min_row=2):
@@ -516,10 +520,17 @@ def selftest():
             assert False, zly
         except ValueError:
             pass
-    a = wczytaj_adresy("﻿adres;uwagi\n# komentarz\na.pl\nA.pl:443, dup\nb.pl:8443;BIP\nzly:port\n\n")
+    a = wczytaj_adresy("\ufeffadres;uwagi\n# komentarz\na.pl\nA.pl:443, dup\nb.pl:8443;BIP\nzly:port\n\n")
     assert [(x[1], x[2]) for x in a] == [("a.pl", 443), ("b.pl", 8443), (None, 0)], a
     # --- status
     assert [status(d, 30) for d in (-1, 0, 29, 30, 500)] == ["WYGASL", "OSTRZEZENIE", "OSTRZEZENIE", "OK", "OK"]
+    # --- raport: tekst z certyfikatu zaczynajacy sie od "=" nie moze byc formula
+    from openpyxl import load_workbook
+    zl = {"adres": "=A1", "status": "BLAD", "dni": None, "od": None, "do": None, "cn": '=HYPERLINK("http://x","y")',
+          "wystawca": "", "san": "=1+1", "uwagi": ""}
+    c = load_workbook(raport([zl], tempfile.mkdtemp(), 30, datetime.datetime.now(datetime.timezone.utc)))["Certyfikaty"]["F2"]
+    assert c.data_type == "s" and c.value.startswith("="), c.data_type
+    assert wczytaj_adresy('"a.pl";x')[0][1] == "a.pl"
     # --- sortowanie
     s = sortuj([{"dni": None, "adres": "z"}, {"dni": 50, "adres": "b"}, {"dni": -3, "adres": "a"}])
     assert [x["adres"] for x in s] == ["a", "b", "z"]
